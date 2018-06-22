@@ -1,5 +1,5 @@
 #!/usr/bin/env python2
-import base64, fractions, optparse, random
+import base64, fractions, optparse, random, requests, re
 try:
     import gmpy
 except ImportError as e:
@@ -74,6 +74,7 @@ class RSA:
             self.c = gmpy.mpz(c)
         else:
             self.c=None
+        
         if p and q:
             assert gmpy.is_prime(p), 'p is not prime'
             assert gmpy.is_prime(q), 'q is not prime'
@@ -82,8 +83,11 @@ class RSA:
             self.q = gmpy.mpz(q)
         elif n and d:   
             self.p, self.q = map(gmpy.mpz, factor_modulus(n, d, e))
+        elif n:
+            self.n = gmpy.mpz(n)
+            self.p, self.q = map(int, factor_online(self.n))
         else:
-            raise ArgumentError('Either (p, q) or (n, d) must be provided')
+            raise ArgumentError('+++++Input m++++')
 
         self._calc_values()
 
@@ -140,12 +144,11 @@ class RSA:
         if decode:
             print('hex_decode:')
             print('\tc = %s' % self.hex_c)
-            print('\tc = %s' % self.hex_m)
+            print('\tm = %s' % self.hex_m)
 
 
     def _dumpvar(self, var):
         val = getattr(self, var)
-        print(val)
 
         parts = lambda s, l: '\n'.join([s[i:i+l] for i in range(0, len(s), l)])
 
@@ -154,6 +157,30 @@ class RSA:
         else:
             print('%s =' % var)
             print(parts('%x' % val, 80) + '\n')
+
+def factor_offline(n):
+        print("failed to factor in http://factordb.com\nThe length of n is %s\nIt might need a very long time and sagemath is required" %(len(n)))
+        try:
+            from sage.all import factor
+            p, q = map(int, re.split(r'\s*\*\s*', str(factor(n))))
+            return (pp,qq )
+        except ImportError as e:
+            raise Exception("Can't factor n")
+        
+    
+
+def factor_online(n):
+    try:
+        r = requests.get('http://factordb.com/index.php', params={'query':int(n)})
+        # print(re.findall(r'>\d+<',r.text))
+        numbers = re.findall(r'>\d+<',r.text)
+        if len(numbers) is 3:
+            p, q = numbers[1][1:-1], numbers[2][1:-1]
+            return(p, q)
+        else:
+            raise Exception('p or q is not prime')
+    except:
+        p, q = factor_offline(n)
 
 
 if __name__ == '__main__':
@@ -182,6 +209,9 @@ if __name__ == '__main__':
         elif options.n and options.d:
             print('Using (n, d) to initialise RSA instance\n')
             rsa = RSA(n=options.n, d=options.d, e=options.e)
+        elif options.n and options.c:
+            print('Using (n, c) to initialise RSA instance\n')
+            rsa = RSA(n=options.n, c=options.c, e=options.e)
         # elif options.p and options.q and options.m:
         #     print('Using (p, q, m) to initialise RSA instance\n')
         # elif options.p and options.q and options.c:
