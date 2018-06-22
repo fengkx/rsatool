@@ -23,13 +23,15 @@ def factor_modulus(n, d, e):
 
     http://www.cacr.math.uwaterloo.ca/hac/
     """
-    t = (e * d - 1)
+    #own the private key and public key, then return p and q
+    t = (e * d - 1) #e*d = t+1
+    				#e*d = k*n +1  when ed = 1 (mod n)
     s = 0
 
     while True:
-        quotient, remainder = divmod(t, 2)
+        quotient, remainder = divmod(t, 2) #return (t//2, t%2) // means drop decimals
 
-        if remainder != 0:
+        if remainder != 0: # if t is odd then break
             break
 
         s += 1
@@ -55,22 +57,31 @@ def factor_modulus(n, d, e):
     return p, q
 
 class RSA:
-    def __init__(self, p=None, q=None, n=None, d=None, e=DEFAULT_EXP):
+    def __init__(self, p=None, q=None, n=None, d=None, m=None, c=None, e=DEFAULT_EXP):
         """
         Initialize RSA instance using primes (p, q)
         or modulus and private exponent (n, d)
         """
-
-        self.e = e
-
+        if e:
+            self.e = gmpy.mpz(e)
+        else:
+            self.e=None
+        if m:
+            self.m = gmpy.mpz(m)
+        else:
+            self.m=None
+        if c:
+            self.c = gmpy.mpz(c)
+        else:
+            self.c=None
         if p and q:
             assert gmpy.is_prime(p), 'p is not prime'
             assert gmpy.is_prime(q), 'q is not prime'
 
-            self.p = p
-            self.q = q
+            self.p = gmpy.mpz(p)
+            self.q = gmpy.mpz(q)
         elif n and d:   
-            self.p, self.q = factor_modulus(n, d, e)
+            self.p, self.q = map(gmpy.mpz, factor_modulus(n, d, e))
         else:
             raise ArgumentError('Either (p, q) or (n, d) must be provided')
 
@@ -85,11 +96,22 @@ class RSA:
             phi = (self.p ** 2) - self.p
 
         self.d = gmpy.invert(self.e, phi)
-
+        
+        if self.m:
+            self.c = pow(self.m, self.e, self.n)
+            self.hex_c = hex(self.c)[2:].decode('hex')
+            self.hex_m = hex(self.m)[2:].decode('hex')
+        if self.c:
+            self.m = pow(self.c, self.d, self.n)
+            self.hex_c = hex(self.c)[2:].decode('hex')
+            self.hex_m = hex(self.m)[2:].decode('hex')
+            
         # CRT-RSA precomputation
+        # to accelerate the calculation 
         self.dP = self.d % (self.p - 1)
         self.dQ = self.d % (self.q - 1)
         self.qInv = gmpy.invert(self.q, self.p)
+        # (p*qInv) %  
 
     def to_pem(self):
         """
@@ -108,17 +130,22 @@ class RSA:
 
         return encoder.encode(seq)
 
-    def dump(self, verbose):
-        vars = ['n', 'e', 'd', 'p', 'q']
+    def dump(self, verbose, decode):
+        vars = ['n', 'e', 'd', 'p', 'q', 'm', 'c']
 
         if verbose:
             vars += ['dP', 'dQ', 'qInv']
-
         for v in vars:
             self._dumpvar(v)
+        if decode:
+            print('hex_decode:')
+            print('\tc = %s' % self.hex_c)
+            print('\tc = %s' % self.hex_m)
+
 
     def _dumpvar(self, var):
         val = getattr(self, var)
+        print(val)
 
         parts = lambda s, l: '\n'.join([s[i:i+l] for i in range(0, len(s), l)])
 
@@ -140,21 +167,31 @@ if __name__ == '__main__':
     parser.add_option('-o', dest='filename', help='output filename')
     parser.add_option('-f', dest='format', help='output format (DER, PEM) (default: PEM)', type='choice', choices=['DER', 'PEM'], default='PEM')
     parser.add_option('-v', dest='verbose', help='also display CRT-RSA representation', action='store_true', default=False)
+    
+    parser.add_option('-m', dest='m', help='message',type='int', default=None)
+    parser.add_option('-c', dest='c', help='ciphertext', type='int', default=None)
+    parser.add_option('--decode', dest='decode', help='display hex decode of cipher and message',action='store_true',default=False)
 
     try:
         (options, args) = parser.parse_args()
 
         if options.p and options.q:
             print('Using (p, q) to initialise RSA instance\n')
-            rsa = RSA(p=options.p, q=options.q, e=options.e)
+            print type(options.m)
+            rsa = RSA(p=options.p, q=options.q, e=options.e, c=options.c, m=options.m)
         elif options.n and options.d:
             print('Using (n, d) to initialise RSA instance\n')
             rsa = RSA(n=options.n, d=options.d, e=options.e)
+        # elif options.p and options.q and options.m:
+        #     print('Using (p, q, m) to initialise RSA instance\n')
+        # elif options.p and options.q and options.c:
+        #     print('Using (p, q, c) to initialise RSA instance\n')
+        # elif options.n and options
         else:
             parser.print_help()
             parser.error('Either (p, q) or (n, d) needs to be specified')
 
-        rsa.dump(options.verbose)
+        rsa.dump(options.verbose, options.decode)
 
         if options.filename:
             print('Saving %s as %s' % (options.format, options.filename))
