@@ -1,15 +1,19 @@
 #!/usr/bin/env python2
 import base64, fractions, optparse, random, requests, re
 try:
-    import gmpy
+    import gmpy2 as gmpy
 except ImportError as e:
     try:
-        import gmpy2 as gmpy
+        import gmpy
+        gmpy.iroot = gmpy.root
     except ImportError:
         raise e
 
 from pyasn1.codec.der import encoder
 from pyasn1.type.univ import *
+from sys import version_info
+if version_info[0] is 2:
+    input = raw_input
 
 PEM_TEMPLATE = '-----BEGIN RSA PRIVATE KEY-----\n%s-----END RSA PRIVATE KEY-----\n'
 DEFAULT_EXP = 65537
@@ -158,26 +162,48 @@ class RSA:
             print('%s =' % var)
             print(parts('%x' % val, 80) + '\n')
 
+def brute_force(n, c, e):
+    print("e is %s \nIf e is really small  such as 3, 5.it can be brute_force" %int(e))
+    choice = input('Do you want to burte force?[y/n]')
+    if choice[0] is 'y':
+        k=1
+        while 1:
+            res = gmpy.iroot((c + k * n), e)
+            if res[1]:
+                print(res)
+                print(k)
+                break
+            else:
+                print("k=%s"%str(k))
+            k=k+1
+        return res[0]
+    else:
+        pass#TO-DO
+
 def factor_offline(n):
         print("failed to factor in http://factordb.com\nThe length of n is %s\nIt might need a very long time and sagemath is required" %(len(n)))
-        try:
-            from sage.all import factor
-            p, q = map(int, re.split(r'\s*\*\s*', str(factor(n))))
-            return (pp,qq )
-        except ImportError as e:
-            raise Exception("Can't factor n")
+        choice = input('Do you want to factor in your local computer?\n[y/n]')
+        if choice[0] is 'y':
+            try:
+                from sage.all import factor
+                p, q = map(int, re.split(r'\s*\*\s*', str(factor(n))))
+                return (pp,qq )
+            except ImportError as e:
+                raise Exception("Can't factor n")
         
-    
 
 def factor_online(n):
     try:
+        print("try using http://factordb.com")
         r = requests.get('http://factordb.com/index.php', params={'query':int(n)})
         # print(re.findall(r'>\d+<',r.text))
         numbers = re.findall(r'>\d+<',r.text)
         if len(numbers) is 3:
             p, q = numbers[1][1:-1], numbers[2][1:-1]
+            print ("found")
             return(p, q)
         else:
+            print('not prime')
             raise Exception('p or q is not prime')
     except:
         p, q = factor_offline(n)
@@ -211,7 +237,11 @@ if __name__ == '__main__':
             rsa = RSA(n=options.n, d=options.d, e=options.e)
         elif options.n and options.c:
             print('Using (n, c) to initialise RSA instance\n')
-            rsa = RSA(n=options.n, c=options.c, e=options.e)
+            try:
+                rsa = RSA(n=options.n, c=options.c, e=options.e)
+            except:
+                m = brute_force(gmpy.mpz(options.n), gmpy.mpz(options.c), gmpy.mpz(options.e))
+                print("m=\n %d (%x)"%(m,m) )
         # elif options.p and options.q and options.m:
         #     print('Using (p, q, m) to initialise RSA instance\n')
         # elif options.p and options.q and options.c:
